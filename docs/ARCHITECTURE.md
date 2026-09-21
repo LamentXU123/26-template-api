@@ -36,7 +36,7 @@ There is no generic repository layer: the handful of MongoDB operations are shor
 
 `{owner: 1, startsAt: 1, _id: 1}` supports the owner prefix and list ordering, with an upper start-time bound where supplied. The overlap condition on `endsAt` is an additional filter; one compound index does not optimize both arbitrary range bounds fully. This tradeoff is sufficient for a personal timetable. The built-in unique `_id` index supports item operations. Renaming usernames requires an explicit data migration because ownership uses the username.
 
-UTC instants avoid ambiguous local times. Clients select an offset for input and render the result in their timezone (for example, Asia/Hong_Kong). This implementation models timed, non-recurring events. All-day events, recurrence rules, university schedule integration and timezone-aware recurrence expansion are deliberately outside scope. Event overlaps are allowed.
+UTC instants avoid ambiguous local times. Clients select an offset for input and render the result in their timezone (for example, Asia/Hong_Kong). A shared route-level parser checks that the normalized UTC year is in 0001–9999 before using an event timestamp or a filter bound. Checking the input's four-digit year alone is insufficient because its offset can cross the supported boundary. This implementation models timed, non-recurring events. All-day events, recurrence rules, university schedule integration and timezone-aware recurrence expansion are deliberately outside scope. Event overlaps are allowed.
 
 ## Isolation and concurrency
 

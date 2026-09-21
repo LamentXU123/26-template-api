@@ -50,6 +50,8 @@ The authoring environment has no Docker engine, so **the image build and Compose
 
 Send `Authorization: Bearer <token>` on every `/events` request. Ownership comes solely from the authenticated user; it cannot be supplied in a request body or query.
 
+CORS preflight permits `GET`, `HEAD`, `POST`, `PATCH`, `DELETE` and `OPTIONS`, including requests with authorization and JSON content headers. Browser clients can update and delete events across origins.
+
 | Method | Path | Behavior |
 | --- | --- | --- |
 | POST | `/events` | Create an event; 201 plus `Location` |
@@ -74,7 +76,7 @@ curl -i http://localhost:3000/events \
 
 Titles are trimmed, nonblank, single-line and limited to 200 characters. Description/location allow null and are limited to 4000/300 characters. Non-text control characters are rejected. Unknown fields are rejected. JSON body values are not coerced into another type.
 
-Input timestamps must use uppercase `T` and `Z` (or an explicit numeric UTC offset), whole seconds and a valid calendar date. An optional all-zero fractional part (`.0`, `.00`, `.000`) is accepted, so response timestamps can be reused unchanged. Non-zero fractional seconds, leap seconds and timezone-free timestamps are rejected. Responses normalize dates to UTC with `.000Z`. `startsAt` must precede `endsAt`.
+Input timestamps must use uppercase `T` and `Z` (or an explicit numeric UTC offset), whole seconds and a valid calendar date. An optional all-zero fractional part (`.0`, `.00`, `.000`) is accepted, so response timestamps can be reused unchanged. Non-zero fractional seconds, leap seconds and timezone-free timestamps are rejected. After applying the offset, the UTC year must be between 0001 and 9999, inclusive, for both event timestamps and query bounds. This keeps stored events representable in iCalendar; for example, `9999-12-31T23:00:00-01:00` is rejected because it becomes year 10000 in UTC. Responses normalize dates to UTC with `.000Z`. `startsAt` must precede `endsAt`.
 
 ### List a timetable window
 

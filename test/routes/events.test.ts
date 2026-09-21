@@ -37,6 +37,151 @@ async function create(body = input, headers = ALICE) {
   return response.json();
 }
 
+test.each(["PATCH", "DELETE"] as const)(
+  "CORS preflight permits authenticated %s requests",
+  async (method) => {
+    const event = await create();
+    const origin = "https://timetable.example";
+    const url = `/events/${event.id}`;
+    const preflight = await app.inject({
+      method: "OPTIONS",
+      url,
+      headers: {
+        origin,
+        "access-control-request-method": method,
+        "access-control-request-headers": "authorization,content-type",
+      },
+    });
+    expect(preflight.statusCode).toBe(204);
+    expect(preflight.headers["access-control-allow-origin"]).toBe("*");
+    expect(
+      String(preflight.headers["access-control-allow-methods"]).split(/,\s*/),
+    ).toContain(method);
+    const headers = String(preflight.headers["access-control-allow-headers"])
+      .toLowerCase()
+      .split(/,\s*/);
+    expect(headers).toContain("authorization");
+    expect(headers).toContain("content-type");
+    const response = await app.inject({
+      method,
+      url,
+      headers: { ...ALICE, origin },
+      ...(method === "PATCH"
+        ? { body: { version: 1, title: "Updated from browser" } }
+        : {}),
+    });
+    expect(response.statusCode).toBe(method === "PATCH" ? 200 : 204);
+    expect(response.headers["access-control-allow-origin"]).toBe("*");
+  },
+);
+
+test.each([
+  {
+    startsAt: "9999-12-31T22:00:00-01:00",
+    endsAt: "9999-12-31T23:00:00-01:00",
+  },
+  { startsAt: "0000-01-01T00:00:00+01:00", endsAt: "0001-01-01T01:00:00Z" },
+  { startsAt: "0001-01-01T00:00:00+01:00", endsAt: "0001-01-01T01:00:00Z" },
+])("create rejects an out-of-range UTC year: %j", async (interval) => {
+  const response = await app.inject({
+    method: "POST",
+    url: "/events",
+    headers: ALICE,
+    body: { ...input, ...interval },
+  });
+  expect(response.statusCode).toBe(400);
+  expect(await app.collections.events.countDocuments()).toBe(0);
+});
+
+test("patch rejects an out-of-range UTC year without changing the event", async () => {
+  const event = await create();
+  for (const changes of [
+    { endsAt: "9999-12-31T23:00:00-01:00" },
+    { startsAt: "0000-01-01T00:00:00+01:00" },
+    { startsAt: "0001-01-01T00:00:00+01:00" },
+  ]) {
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/events/${event.id}`,
+      headers: ALICE,
+      body: { version: 1, ...changes },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(
+      (await app.inject({ url: `/events/${event.id}`, headers: ALICE })).json(),
+    ).toEqual(event);
+  }
+});
+
+test("list and export filters reject an out-of-range UTC year", async () => {
+  for (const value of [
+    "9999-12-31T23:00:00-01:00",
+    "0000-01-01T00:00:00+01:00",
+    "0001-01-01T00:00:00+01:00",
+  ]) {
+    for (const field of ["from", "to"]) {
+      const query = new URLSearchParams({ [field]: value });
+      for (const path of ["/events", "/events/export.ics"]) {
+        expect(
+          (await app.inject({ url: `${path}?${query}`, headers: ALICE }))
+            .statusCode,
+        ).toBe(400);
+      }
+    }
+  }
+});
+
+test.each([
+  {
+    startsAt: "0001-01-01T01:00:00+01:00",
+    endsAt: "0001-01-01T02:00:00+01:00",
+  },
+  {
+    startsAt: "9999-12-31T22:00:00-01:00",
+    endsAt: "9999-12-31T22:59:59-01:00",
+  },
+])(
+  "supported calendar year boundaries remain exportable: %j",
+  async (interval) => {
+    const event = await create({ ...input, ...interval });
+    const response = await app.inject({
+      url: "/events/export.ics",
+      headers: ALICE,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toMatch(/DTSTART:\d{8}T\d{6}Z\r\n/);
+    expect(response.body).toMatch(/DTEND:\d{8}T\d{6}Z\r\n/);
+    const calendar = new ICAL.Component(ICAL.parse(response.body));
+    const parsedEvent = new ICAL.Event(
+      calendar.getFirstSubcomponent("vevent")!,
+    );
+    // Compare calendar fields directly: Date.UTC (used by ical.js.toJSDate)
+    // interprets years 0-99 as 1900-1999, despite correct parsed calendar fields.
+    for (const [parsed, expected] of [
+      [parsedEvent.startDate, event.startsAt],
+      [parsedEvent.endDate, event.endsAt],
+    ] as const) {
+      const date = new Date(expected);
+      expect([
+        parsed.year,
+        parsed.month,
+        parsed.day,
+        parsed.hour,
+        parsed.minute,
+        parsed.second,
+      ]).toEqual([
+        date.getUTCFullYear(),
+        date.getUTCMonth() + 1,
+        date.getUTCDate(),
+        date.getUTCHours(),
+        date.getUTCMinutes(),
+        date.getUTCSeconds(),
+      ]);
+      expect(parsed.zone.tzid).toBe("UTC");
+    }
+  },
+);
+
 test("CRUD normalizes offsets, preserves fields and clears nullable fields", async () => {
   const response = await app.inject({
     method: "POST",

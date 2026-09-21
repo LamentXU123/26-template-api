@@ -31,9 +31,21 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox) => {
       reply.header("Cache-Control", "private, no-store");
     });
 
+    function parseTimestamp(value: string): Date {
+      const date = new Date(value);
+      // The input's four-digit year can overflow after applying its offset.
+      const year = date.getUTCFullYear();
+      if (!Number.isFinite(date.getTime()) || year < 1 || year > 9999) {
+        throw scope.httpErrors.badRequest(
+          "Timestamp must resolve to a UTC year between 0001 and 9999",
+        );
+      }
+      return date;
+    }
+
     function filterFor(owner: string, range: { from?: string; to?: string }) {
-      const from = range.from ? new Date(range.from) : undefined;
-      const to = range.to ? new Date(range.to) : undefined;
+      const from = range.from ? parseTimestamp(range.from) : undefined;
+      const to = range.to ? parseTimestamp(range.to) : undefined;
       if (from && to && from >= to) {
         throw scope.httpErrors.badRequest("from must be before to");
       }
@@ -119,8 +131,8 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox) => {
         },
       },
       async (request, reply) => {
-        const startsAt = new Date(request.body.startsAt);
-        const endsAt = new Date(request.body.endsAt);
+        const startsAt = parseTimestamp(request.body.startsAt);
+        const endsAt = parseTimestamp(request.body.endsAt);
         if (startsAt >= endsAt)
           throw scope.httpErrors.badRequest("startsAt must be before endsAt");
         const now = new Date();
@@ -206,11 +218,11 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox) => {
           startsAt:
             request.body.startsAt === undefined
               ? current.startsAt
-              : new Date(request.body.startsAt),
+              : parseTimestamp(request.body.startsAt),
           endsAt:
             request.body.endsAt === undefined
               ? current.endsAt
-              : new Date(request.body.endsAt),
+              : parseTimestamp(request.body.endsAt),
           updatedAt: new Date(),
         };
         if (changes.startsAt >= changes.endsAt)

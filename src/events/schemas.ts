@@ -5,7 +5,8 @@ const timestamp = Type.String({
   format: "date-time",
   pattern:
     "^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.0{1,3})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$",
-  description: "RFC 3339 timestamp with timezone and whole-second precision.",
+  description:
+    "RFC 3339 timestamp with timezone and whole-second precision; the normalized UTC year must be 0001-9999.",
 });
 const nullableText = (maxLength: number) =>
   Type.Union([

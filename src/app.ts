@@ -45,6 +45,7 @@ const app: FastifyPluginAsync<AppOptions> = async (
   // Register CORS
   await fastify.register(cors, {
     origin: "*",
+    methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
 
   // Register Swagger & Swagger UI & Scalar
